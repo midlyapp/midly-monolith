@@ -1,0 +1,38 @@
+generator client {
+  provider = "prisma-client"
+  output   = "./generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Users {
+  id        String  @id @default(nanoid())
+ 
+  email     String?  @unique
+  phone     String? @unique
+  password String
+
+  name      String
+  surname   String?
+  avatarUrl String?
+
+  method AuthMethod @default(CREDENTIALS)
+
+  isPhoneVerified Boolean  @default(false) @map("is_phone_verified")
+  isEmailVerified Boolean  @default(false) @map("is_email_verified")
+
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt      @map("updated_at")
+  
+  @@map("users")
+}
+
+enum AuthMethod {
+  CREDENTIALS
+  YANDEX
+  VK
+}
