@@ -4,6 +4,8 @@ import { JwtModule } from '@nestjs/jwt'
 
 import { getProvidersConfig } from '@/config/loaders/oauth.loader'
 
+import { NotificationsFacade } from '../notifications/notifications.facade'
+import { NotificationsModule } from '../notifications/notifications.module'
 import { OtpService } from '../otp/otp.service'
 import { UsersRepository } from '../users/users.repository'
 import { UsersService } from '../users/users.service'
@@ -28,7 +30,8 @@ import {
 			useFactory: getProvidersConfig,
 			inject: [ConfigService]
 		}),
-		JwtModule
+		JwtModule,
+		NotificationsModule
 	],
 	controllers: [
 		AuthSignInController,

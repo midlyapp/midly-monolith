@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common'
 
+import { NotificationsFacade } from '@/modules/notifications/notifications.facade'
 import { OtpService } from '@/modules/otp/otp.service'
 import type { OtpAuthLayer } from '@/modules/otp/types'
 import { UsersRepository } from '@/modules/users/users.repository'
@@ -10,7 +11,8 @@ import type { SendCodeRequest, ValidateCodeRequest } from '../dto/requests'
 export class AuthCodesService {
 	constructor(
 		private readonly userRepository: UsersRepository,
-		private readonly otpService: OtpService
+		private readonly otpService: OtpService,
+		private readonly notificationsFacade: NotificationsFacade
 	) {}
 
 	public async sendCode(data: SendCodeRequest, entity: OtpAuthLayer) {
@@ -20,8 +22,13 @@ export class AuthCodesService {
 		if (isUserDefined) throw new Error('Redirect to sign in')
 
 		const { code } = await this.otpService.create(identifier, entity)
+		const message = { identifier, code }
 
-		//Notification
+		if (entity === 'otpAuthSignUp') {
+			this.notificationsFacade.authSignUpCode(message)
+		} else {
+			this.notificationsFacade.authRecoveryCode(message)
+		}
 
 		return {
 			ok: true
@@ -53,7 +60,13 @@ export class AuthCodesService {
 
 		const { code } = await this.otpService.recreate(identifier, entity)
 
-		//Notification
+		const message = { identifier, code }
+
+		if (entity === 'otpAuthSignUp') {
+			this.notificationsFacade.authSignUpCode(message)
+		} else {
+			this.notificationsFacade.authRecoveryCode(message)
+		}
 
 		return {
 			ok: true
