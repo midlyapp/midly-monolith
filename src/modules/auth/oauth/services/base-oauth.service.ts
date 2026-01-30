@@ -1,35 +1,31 @@
 import {
 	BadRequestException,
-	Injectable,
 	UnauthorizedException
 } from '@nestjs/common'
 
 import type { TypeBaseOauthOptions } from './types/base-oauth-options.types'
 import { TypeUserInfo } from './types/user-info.types'
+import { randomBytesAsync } from '@/libs/utils'
+import { createHash } from 'node:crypto'
+import {nanoId} from 'nanoid'
+import { PKCERepository } from '../pkce.repository'
 
-/**
- * Базовый сервис для работы с OAuth-провайдерами.
- *
- * Этот сервис предоставляет общие методы для аутентификации через OAuth, такие как
- * получение URL для авторизации, извлечение информации о пользователе и обработка токенов.
- */
-@Injectable()
-export class BaseOAuthService {
+
+
+export abstract class BaseOAuthService {
 	private BASE_URL: string
+	public  type: string
+	public verifier_code = '-EXGdwKnF-1wyw8CkSKRm_giDkvmBPOEnOYK3TDiqpY'
+	public challenge_code = 'qJy-TQ_64Up-1W9hqb3JU1RjDCYE7VipuXfEq8vtzQU'
 
-	/**
-	 * Конструктор базового сервиса OAuth.
-	 *
-	 * @param options - Опции провайдера, содержащие необходимые параметры для аутентификации.
-	 */
-	public constructor(private readonly options: TypeBaseOauthOptions) {}
+	public constructor(
+		public readonly options: TypeBaseOauthOptions,
+		type: string,
+		private readonly pkceRepository: PKCERepository
+	) {
+		this.type = type
+	}
 
-	/**
-	 * Извлекает информацию о пользователе из данных, полученных от провайдера.
-	 *
-	 * @param data - Данные, полученные от провайдера.
-	 * @returns Объект с информацией о пользователе, включая имя провайдера.
-	 */
 	protected async extractUserInfo(data: any): Promise<TypeUserInfo> {
 		return {
 			...data,
@@ -37,42 +33,39 @@ export class BaseOAuthService {
 		}
 	}
 
-	/**
-	 * Формирует URL для авторизации.
-	 *
-	 * @returns URL для авторизации пользователя через OAuth.
-	 */
-	public getAuthUrl() {
+
+	public async  getAuthUrl<T>(parameters: T): Promise <string> {
+		const {code_verifier, code_challenge, code_challenge_method} = await this.createPKCE(43)
 		const query = new URLSearchParams({
 			response_type: 'code',
-			client_id: this.options.client_id,
+			client_id: '54426247',
+			code_challenge,
+			code_challenge_method,
 			redirect_uri: this.getRedirectUrl(),
+			state: 's7UJozJ59gPnNsDmJ2WJs8DSLvAwAU9n',
 			scope: (this.options.scopes ?? []).join(' '),
-			access_type: 'offline',
-			prompt: 'select_account'
+			// access_type: 'offline',
+			// prompt: 'select_account'
+			...parameters
 		})
 
 		return `${this.options.authorize_url}?${query}`
 	}
 
-	/**
-	 * Находит пользователя по коду авторизации и возвращает информацию о пользователе.
-	 *
-	 * @param code - Код авторизации, полученный от провайдера.
-	 * @returns Объект с информацией о пользователе.
-	 * @throws BadRequestException - Если не удалось получить токены или пользователь.
-	 * @throws UnauthorizedException - Если токен доступа недействителен.
-	 */
-	public async findUserByCode(code: string): Promise<TypeUserInfo> {
+
+	public async findUserByCode(code: string, device_id?:string): Promise<TypeUserInfo> {
 		const client_id = this.options.client_id
 		const client_secret = this.options.client_secret
 
 		const tokenQuery = new URLSearchParams({
-			client_id,
-			client_secret,
+			grant_type: 'authorization_code',
+			code_verifier: this.verifier_code,
+			redirect_uri: this.getRedirectUrl(), // Yandex необязательный
 			code,
-			redirect_uri: this.getRedirectUrl(),
-			grant_type: 'authorization_code'
+			client_id: '54426247',
+			device_id: device_id ? device_id : null,
+			// client_secret,
+			state: 's7UJozJ59gPnNsDmJ2WJs8DSLvAwAU9n',
 		})
 
 		const tokensRequest = await fetch(this.options.access_url, {
@@ -80,17 +73,19 @@ export class BaseOAuthService {
 			body: tokenQuery,
 			headers: {
 				'Content-Type': 'application/x-www-form-urlencoded',
-				Accept: 'application/json'
 			}
 		})
 
+		
 		if (!tokensRequest.ok) {
 			throw new BadRequestException(
 				`Не удалось получить пользователя с ${this.options.profile_url}. Проверьте правильность токена доступа.`
 			)
 		}
-
+		
 		const tokens = await tokensRequest.json()
+		
+		console.log('Токены: ', tokens)
 
 		if (!tokens.access_token) {
 			throw new BadRequestException(
@@ -98,11 +93,20 @@ export class BaseOAuthService {
 			)
 		}
 
+		const query = new URLSearchParams({
+			access_token: tokens.access_token,
+			client_id: '54426247'
+		})
+
 		const userRequest = await fetch(this.options.profile_url, {
+			method: 'POST',
+			body: query,
 			headers: {
-				Authorization: `Bearer ${tokens.access_token}`
+				'Content-Type': 'application/x-www-form-urlencoded',
 			}
 		})
+
+
 
 		if (!userRequest.ok) {
 			throw new UnauthorizedException(
@@ -111,6 +115,7 @@ export class BaseOAuthService {
 		}
 
 		const user = await userRequest.json()
+		console.log(user)
 		const userData = await this.extractUserInfo(user)
 
 		return {
@@ -122,57 +127,27 @@ export class BaseOAuthService {
 		}
 	}
 
-	/**
-	 * Возвращает URL для перенаправления после успешной аутентификации.
-	 *
-	 * @returns URL для перенаправления.
-	 */
+	// EDIT
 	private getRedirectUrl() {
-		return `${this.BASE_URL}/auth/oauth/callback/${this.options.name}`
+		return 'http://localhost/auth/oauth/callback/vk'
+	}
+	// private getRedirectUrl() {
+	// 	return `http://localhost:4000/auth/oauth/callback/${this.options.name}`
+	// }
+
+	public abstract getOAuthUrl(data)
+
+	public async getTokens<T extends Record<string, string>, U>(data:T): Promise<U>{
+		const { state, code_challenge, code_verifier} = await this.createPKCE()
+		const query = new URLSearchParams({
+					...data
+				})
+				return ''
 	}
 
-	/**
-	 * Устанавливает базовый URL для сервиса.
-	 *
-	 * @param value - Новый базовый URL.
-	 */
-	public set baseUrl(value: string) {
-		this.BASE_URL = value
-	}
+	public getUserInfo(data){}
 
-	/**
-	 * Возвращает имя провайдера.
-	 *
-	 * @returns Имя провайдера.
-	 */
-	public get name() {
-		return this.options.name
-	}
 
-	/**
-	 * Возвращает URL для доступа.
-	 *
-	 * @returns URL для доступа.
-	 */
-	public get access_url() {
-		return this.options.access_url
-	}
 
-	/**
-	 * Возвращает URL для профиля.
-	 *
-	 * @returns URL для профиля.
-	 */
-	public get profile_url() {
-		return this.options.profile_url
-	}
 
-	/**
-	 * Возвращает массив с областями доступа.
-	 *
-	 * @returns Массив областей доступа.
-	 */
-	public get scopes() {
-		return this.options.scopes
-	}
 }

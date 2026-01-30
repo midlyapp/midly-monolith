@@ -64,7 +64,13 @@ export class AuthTokensService {
 		}
 	}
 
+	public async inTokenWhiteListed(jti: string){
+
+	}
+
 	public async revokeToken(id: string, refreshToken: string): Promise<void> {
 		const isUserDefined = await this.userRepository.findById(id)
 	}
+
+	
 }

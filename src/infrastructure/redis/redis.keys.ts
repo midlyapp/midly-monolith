@@ -3,5 +3,6 @@ export const RedisKeys = {
 	otpAuthRecovery: (identifier: string) => `otp:auth_recovery:${identifier}`,
 	authSignUpToken: (identifier: string) => `auth:signup_token:${identifier}`,
 	authRecoveryToken: (identifier: string) =>
-		`auth:recovery_token:${identifier}`
+		`auth:recovery_token:${identifier}`,
+	oauthState: (state: string) => `oauth:state:${state}`
 } as const

@@ -1,10 +1,7 @@
 import { Module } from '@nestjs/common'
-import { ConfigModule, ConfigService } from '@nestjs/config'
 import { JwtModule } from '@nestjs/jwt'
 
-import { getProvidersConfig } from '@/config/loaders/oauth.loader'
 
-import { NotificationsFacade } from '../notifications/notifications.facade'
 import { NotificationsModule } from '../notifications/notifications.module'
 import { OtpService } from '../otp/otp.service'
 import { UsersRepository } from '../users/users.repository'
@@ -16,20 +13,21 @@ import {
 	AuthSignUpController,
 	AuthTokensController
 } from './controllers'
-import { OAuthModule } from './oauth/oauth.module'
 import {
 	AuthCodesService,
 	AuthCoreService,
 	AuthTokensService
 } from './services'
+import { BaseOAuthService } from './oauth/services/base-oauth.service'
+import { YandexProvider } from './oauth/services/yandex.provider'
+import { OAuthService } from './services/auth-oauth.service'
+import { AuthOAuthController } from './controllers/auth-oauth.controller'
+import { VkProvider } from './oauth/services/vk.provider'
+
 
 @Module({
 	imports: [
-		OAuthModule.registerAsync({
-			imports: [ConfigModule],
-			useFactory: getProvidersConfig,
-			inject: [ConfigService]
-		}),
+
 		JwtModule,
 		NotificationsModule
 	],
@@ -37,7 +35,8 @@ import {
 		AuthSignInController,
 		AuthSignUpController,
 		AuthTokensController,
-		AuthRecoveryController
+		AuthRecoveryController,
+		AuthOAuthController
 	],
 	providers: [
 		AuthCoreService,
@@ -45,7 +44,15 @@ import {
 		AuthTokensService,
 		UsersService,
 		OtpService,
-		UsersRepository
+		UsersRepository,
+		YandexProvider,
+		VkProvider,
+		OAuthService,
+		{
+			provide: 'OAUTH_PROVIDER',
+			useFactory: (...providers: BaseOAuthService[]) => providers,
+			inject: [YandexProvider, VkProvider],
+		},
 	]
 })
 export class AuthModule {}
